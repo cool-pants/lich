@@ -25,3 +25,4 @@ Link to read more: [DMG 2024 - Extracts](https://www.notion.so/DMG-2024-Extracts
 
 Now that you know what DMing is in general, what the DMG thinks it means, it is time to know the exact tools with which you can DM in our server.
 Link to read more:  [DM Mechanics](https://www.notion.so/DM-Mechanics-166a7971d73380ec8b24f2dce0cb4976?pvs=21)
+

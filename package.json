@@ -1,15 +1,15 @@
 {
-  "name": "@jackyzha0/quartz",
-  "description": "🌱 publish your digital garden and notes as a website",
+  "name": "living-chronicles",
+  "description": "Living Chronicles - A D&D Westmarches Campaign Wiki",
   "private": true,
   "version": "4.5.2",
   "type": "module",
-  "author": "jackyzha0 <j.zhao2k19@gmail.com>",
+  "author": "cool-pants",
   "license": "MIT",
-  "homepage": "https://quartz.jzhao.xyz",
+  "homepage": "https://living-chronicles.netlify.app",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jackyzha0/quartz.git"
+    "url": "https://github.com/cool-pants/lich.git"
   },
   "scripts": {
     "quartz": "./quartz/bootstrap-cli.mjs",
