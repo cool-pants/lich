@@ -1,0 +1,203 @@
+name: Mechanics Changelog
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "content/**"
+
+permissions:
+  contents: write
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    # Skip runs triggered by this workflow's own commits
+    if: "!contains(github.event.head_commit.message, '[changelog-bot]')"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Detect Mechanics changes and update changelog
+        run: |
+          set -euo pipefail
+
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+
+          # On first push (e.g. repo init), skip
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "Initial push -- skipping changelog generation"
+            exit 0
+          fi
+
+          # Collect files changed between the before/after commits
+          CHANGED_FILES=$(git diff --name-only --diff-filter=ACMR "$BEFORE" "$AFTER" -- 'content/')
+
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No content files changed"
+            exit 0
+          fi
+
+          # Filter to files that have a Mechanics tag in frontmatter
+          MECHANICS_FILES=""
+          ADDED_FILES=""
+          MODIFIED_FILES=""
+          DELETED_FILES=""
+
+          for file in $CHANGED_FILES; do
+            if [ ! -f "$file" ]; then
+              continue
+            fi
+
+            # Extract frontmatter and check for Mechanics tag
+            # Supports both `tags: [Mechanics]` and `tags:\n  - Mechanics` formats
+            HAS_MECHANICS=$(awk '
+              BEGIN { in_fm=0; in_tags=0; found=0 }
+              /^---$/ { if (in_fm) exit; in_fm=1; next }
+              in_fm && /^tags:/ {
+                if (/Mechanics/) { found=1; exit }
+                in_tags=1; next
+              }
+              in_fm && in_tags && /^  - / {
+                if (/Mechanics/) { found=1; exit }
+                next
+              }
+              in_fm && in_tags && /^[^ ]/ { in_tags=0 }
+              END { print found }
+            ' "$file")
+
+            if [ "$HAS_MECHANICS" = "1" ]; then
+              MECHANICS_FILES="$MECHANICS_FILES $file"
+
+              # Check if it was added or modified
+              if git diff --name-only --diff-filter=A "$BEFORE" "$AFTER" -- "$file" | grep -q .; then
+                ADDED_FILES="$ADDED_FILES $file"
+              else
+                MODIFIED_FILES="$MODIFIED_FILES $file"
+              fi
+            fi
+          done
+
+          # Also check for deleted Mechanics files
+          DELETED_CONTENT=$(git diff --name-only --diff-filter=D "$BEFORE" "$AFTER" -- 'content/')
+          for file in $DELETED_CONTENT; do
+            # Check the old version of the file for Mechanics tag
+            HAS_MECHANICS=$(git show "$BEFORE:$file" 2>/dev/null | awk '
+              BEGIN { in_fm=0; in_tags=0; found=0 }
+              /^---$/ { if (in_fm) exit; in_fm=1; next }
+              in_fm && /^tags:/ {
+                if (/Mechanics/) { found=1; exit }
+                in_tags=1; next
+              }
+              in_fm && in_tags && /^  - / {
+                if (/Mechanics/) { found=1; exit }
+                next
+              }
+              in_fm && in_tags && /^[^ ]/ { in_tags=0 }
+              END { print found }
+            ' || echo "0")
+
+            if [ "$HAS_MECHANICS" = "1" ]; then
+              MECHANICS_FILES="$MECHANICS_FILES $file"
+              DELETED_FILES="$DELETED_FILES $file"
+            fi
+          done
+
+          if [ -z "$(echo "$MECHANICS_FILES" | xargs)" ]; then
+            echo "No Mechanics-tagged files changed"
+            exit 0
+          fi
+
+          echo "Mechanics files changed:"
+          echo "$MECHANICS_FILES" | tr ' ' '\n' | grep -v '^$'
+
+          # Determine semver bump from commit messages
+          COMMITS=$(git log --format="%s" "$BEFORE".."$AFTER")
+          BUMP="patch"
+
+          if echo "$COMMITS" | grep -qiE '^(BREAKING|major):'; then
+            BUMP="major"
+          elif echo "$COMMITS" | grep -qiE '^(feat|add):'; then
+            BUMP="minor"
+          fi
+
+          echo "Determined bump: $BUMP"
+
+          # Read current version
+          CURRENT_VERSION=$(cat VERSION | tr -d '[:space:]')
+          IFS='.' read -r VMAJOR VMINOR VPATCH <<< "$CURRENT_VERSION"
+
+          case "$BUMP" in
+            major)
+              VMAJOR=$((VMAJOR + 1))
+              VMINOR=0
+              VPATCH=0
+              ;;
+            minor)
+              VMINOR=$((VMINOR + 1))
+              VPATCH=0
+              ;;
+            patch)
+              VPATCH=$((VPATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="${VMAJOR}.${VMINOR}.${VPATCH}"
+          echo "Version: $CURRENT_VERSION -> $NEW_VERSION"
+
+          # Write new version
+          echo "$NEW_VERSION" > VERSION
+
+          # Build changelog entry
+          DATE=$(date +%Y-%m-%d)
+          ENTRY="## v${NEW_VERSION} (${DATE})\n"
+
+          if [ -n "$(echo "$ADDED_FILES" | xargs)" ]; then
+            ENTRY="${ENTRY}\n### Added\n"
+            for f in $ADDED_FILES; do
+              NAME=$(basename "$f" .md)
+              ENTRY="${ENTRY}- ${NAME}\n"
+            done
+          fi
+
+          if [ -n "$(echo "$MODIFIED_FILES" | xargs)" ]; then
+            ENTRY="${ENTRY}\n### Changed\n"
+            for f in $MODIFIED_FILES; do
+              NAME=$(basename "$f" .md)
+              # Get a brief summary of what changed
+              DIFF_STAT=$(git diff --stat "$BEFORE" "$AFTER" -- "$f" | tail -1 | sed 's/^ *//')
+              ENTRY="${ENTRY}- ${NAME} (${DIFF_STAT})\n"
+            done
+          fi
+
+          if [ -n "$(echo "$DELETED_FILES" | xargs)" ]; then
+            ENTRY="${ENTRY}\n### Removed\n"
+            for f in $DELETED_FILES; do
+              NAME=$(basename "$f" .md)
+              ENTRY="${ENTRY}- ${NAME}\n"
+            done
+          fi
+
+          # Prepend entry to changelog after the CHANGELOG_START marker
+          if [ -f "content/changelog.md" ]; then
+            sed -i "s|<!-- CHANGELOG_START -->|<!-- CHANGELOG_START -->\n$(echo -e "$ENTRY")|" content/changelog.md
+          fi
+
+          echo "Changelog updated with v${NEW_VERSION}"
+
+      - name: Commit and push changelog
+        run: |
+          git config user.name "changelog-bot"
+          git config user.email "changelog-bot@users.noreply.github.com"
+          git add VERSION content/changelog.md
+          # Only commit if there are staged changes
+          if git diff --cached --quiet; then
+            echo "No changelog changes to commit"
+            exit 0
+          fi
+          git commit -m "chore: update Mechanics changelog to v$(cat VERSION | tr -d '[:space:]') [changelog-bot]"
+          git push

@@ -1,0 +1,46 @@
+name: Deploy to Netlify
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  THEME_NAME: catppuccin.frappe
+
+concurrency:
+  group: "deploy"
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fetch Quartz Theme
+        run: curl -s -S https://raw.githubusercontent.com/saberzero1/quartz-themes/master/action.sh | bash -s -- $THEME_NAME
+
+      - name: Build site
+        run: npx quartz build
+
+      - name: Deploy to Netlify
+        uses: nwtgck/actions-netlify@v3
+        with:
+          publish-dir: ./public
+          production-branch: main
+          production-deploy: true
+          deploy-message: "Deploy from GitHub Actions - ${{ github.sha }}"
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}

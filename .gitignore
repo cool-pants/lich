@@ -1,0 +1,43 @@
+# Build output
+public/
+prof/
+tsconfig.tsbuildinfo
+.quartz-cache/
+
+# Dependencies
+node_modules/
+
+# Obsidian internals
+.obsidian/
+
+# Private/draft content
+private/
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+secrets.yaml
+secrets.yml
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Replit
+.replit
+replit.nix
+
+# Logs
+*.log
+npm-debug.log*

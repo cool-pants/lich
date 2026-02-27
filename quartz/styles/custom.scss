@@ -1,0 +1,34 @@
+@use "./base.scss";
+@use "./themes";
+
+h1,
+h2,
+h3,
+h4 {
+  letter-spacing: 0.03em;
+}
+
+.page-title {
+  font-variant: small-caps;
+  letter-spacing: 0.08em;
+}
+
+article a {
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+article a:hover {
+  text-decoration-style: solid;
+}
+
+blockquote {
+  border-left: 3px solid var(--tertiary);
+  padding-left: 1rem;
+  font-style: italic;
+}
+
+.tag-link {
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+}
